@@ -171,3 +171,56 @@ exports.loginUser = async (req, res) => {
     
 
 }
+
+// User Logout Controller
+exports.logoutUser = async (req,res) =>{
+    try {
+       await User.findByIdAndUpdate(req.user._id,{
+            $set : {
+                refreshToken: undefined
+            }
+        })
+
+        const cookieOptions = {
+            httpOnly: true,
+            secure: true
+        }
+        return res.status(200).clearCookie("accessToken",cookieOptions).clearCookie("refreshToken",cookieOptions).json({message: "User logged out successfully"})
+        
+    } catch (error) {
+        console.log("error in logout controller", error)
+        return res.status(500).json({message: "Internal server error"})
+    }
+}
+
+// get user profile controller
+exports.getUserProfile = async (req,res) =>{
+    try {
+        const user = await User.findById(req.user._id).select("-password -refreshToken")
+        .populate("shop")
+        if(!user) {
+            return res.status(404).json({
+                success : false,
+                message : "User Not Found"
+            })
+        }
+        return res.status(200).json({
+            success : true,
+            message : "User profile fetched successfully",
+            user : user
+        })
+
+    }
+    catch (error) {
+        console.log("error in get user profile controller", error)
+        return res.status(500).json({message: "error in get user profile controller",
+            err : error
+        })
+        
+    }
+}
+
+// update user profile controller (name, avatar, phone)
+
+
+// change password controller 

@@ -88,29 +88,3 @@ exports.isCustomer = (req, res, next) => {
 };
 
 
-// Suspended Check
-exports.isSuspended = (req, res, next) => {
-
-    if (req.user?.status === "suspended") {
-        return res.status(403).json({
-            success: false,
-            msg: "Account Suspended"
-        });
-    }
-
-    next();
-};
-
-
-// IDs Expired Check
-exports.isExpired = (req, res, next) => {
-
-    if (req.user?.status === "ids_expired") {
-        return res.status(403).json({
-            success: false,
-            msg: "IDs Expired"
-        });
-    }
-
-    next();
-};
