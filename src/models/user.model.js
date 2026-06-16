@@ -26,7 +26,8 @@ const userSchema = new mongoose.Schema({
         required : true
     },
     avatar : {
-        type : String
+        url : String,
+        public_id: String
     },
     role : {
         type : String,
@@ -49,6 +50,13 @@ const userSchema = new mongoose.Schema({
     refreshToken : {
         type : String
     },
+
+    otp : {
+        type : String
+    },
+    otpExpiry : {
+        type : Date
+    }
   
 
 },{timestamps:true})

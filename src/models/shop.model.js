@@ -1,6 +1,6 @@
 const mongoose = require ('mongoose')
+const crypto = require('crypto');
 
-const {v4 : uuidv4} = require ('uuid')
 
 const slug = require ('mongoose-slug-updater')
 
@@ -95,7 +95,7 @@ const shopSchema =  new mongoose.Schema({
         type : String,
         unique :true,
         index:true,
-        default : () => uuidv4() // naya documnt bante hi uuid auto generate krega
+        default : () => crypto.randomUUID() // naya documnt bante hi uuid auto generate krega
 
     },
     isOpen : {
@@ -106,6 +106,7 @@ const shopSchema =  new mongoose.Schema({
 
     /// -----   SETTINGS   ------
     settings : {
+        
         acceptQROrder : {
             type :Boolean,
             default : true

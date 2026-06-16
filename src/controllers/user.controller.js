@@ -1,4 +1,8 @@
 const User = require('../models/user.model')
+const {cloudinary} = require('../config/cloudinary')
+
+const { sendMail } = require('../utils/mailSender')
+const { verifyOTPEmailTemplate } = require('../mails/verifyOTP')
 
 // generate access and refresh token
 const generateAccessAndRefreshTokens = async (userId)=>{
@@ -24,78 +28,273 @@ const generateAccessAndRefreshTokens = async (userId)=>{
 // register User Controller Logic
 exports.registerUser = async (req, res) => {
     try {
-        // get data from req body
-        const { name, email, phone, password } = req.body
 
-        // check empty fields 
-        if(!name || !email || !phone || !password ) {
+        const { name, email, phone, password, role } = req.body;
+
+        // validation
+        if (!name || !email || !phone || !password || !role) {
             return res.status(400).json({
-                success : false,
-                message : "All fields are required"
-            })
+                success: false,
+                message: "All fields are required"
+            });
         }
-        // check is user already exit or not 
+
+        // existing user check
         const existingUser = await User.findOne({
-            $or :[{email},{phone}]
-        })
+            $or: [{ email }, { phone }]
+        });
 
-        if (existingUser){
+        if (existingUser) {
             return res.status(400).json({
-                success : false,
-                message : "user already exist with this email or phone number" 
-            })
+                success: false,
+                message: "User already exists"
+            });
         }
-        // create user in database 
+
+        // generate otp
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        const otpExpiry = new Date(
+            Date.now() + 10 * 60 * 1000
+        );
+
+        // create user
         const user = await User.create({
             name,
             email,
             phone,
             password,
-            isVerified : true,
-        })
-        
-        // generate tokens
-        const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id)
+            role,
+            otp,
+            otpExpiry,
+            isVerified: false
+        });
 
-        // check user created or not and if created then remove sensitive fields  password and refresh token from response
-        const createdUser = await User.findById(user._id).select("-password -refreshToken")
+        // send mail
+        await sendMail(
+            email,
+            "Dukanoo | OTP Verification",
+            verifyOTPEmailTemplate(name, otp)
+        );
+
+        return res.status(201).json({
+            success: true,
+            message:
+                "User registered successfully. Please verify OTP sent to email.",
+            userId: user._id
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Error in registering user",
+            error: error.message
+        });
+    }
+};
+
+//  verify OTP Controller
+exports.verifyOTP = async (req, res) => {
+
+    try {
+
+        const { email, otp } = req.body;
+
+        // validation
+        if (!email || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Email and OTP are required"
+            });
+        }
+
+        // find user
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        // already verified
+        if (user.isVerified) {
+            return res.status(400).json({
+                success: false,
+                message: "User already verified"
+            });
+        }
+
+        // check otp
+        if (user.otp !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP"
+            });
+        }
+
+        // check expiry
+        if (user.otpExpiry < Date.now()) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP expired"
+            });
+        }
+
+        // verify user
+        user.isVerified = true;
+
+        // clear otp
+        user.otp = undefined;
+        user.otpExpiry = undefined;
+
+        await user.save();
+
+        // generate tokens
+        const { accessToken, refreshToken } =
+            await generateAccessAndRefreshTokens(user._id);
+
+        // remove sensitive data
+        const verifiedUser = await User.findById(user._id)
+            .select("-password -refreshToken");
 
         // cookie options
         const cookieOptions = {
-            httpOnly : true,
-            secure : true
+            httpOnly: true,
+            secure: true
+        };
+
+        return res
+            .status(200)
+            .cookie(
+                "accessToken",
+                accessToken,
+                cookieOptions
+            )
+            .cookie(
+                "refreshToken",
+                refreshToken,
+                cookieOptions
+            )
+            .json({
+                success: true,
+                message: "OTP verified successfully",
+                user: verifiedUser,
+                accessToken,
+                refreshToken
+            });
+
+    } catch (error) {
+
+        console.log(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Error while verifying OTP",
+            error: error.message
+        });
+    }
+};
+
+// resend OTP controller
+// resend OTP controller
+exports.resendOTP = async (req, res) => {
+    try {
+
+        const { email } = req.body;
+
+        // validation
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: "Email is required"
+            });
         }
 
-        if(!createdUser){
-            return res.status(500).json({
-                success : false,
-                message : " something went wrong while creating User"
-            })
+        // find user
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
         }
 
-       return res
-       .status(201)
-       .cookie("refreshToken", refreshToken, cookieOptions)
-       .cookie("accessToken", accessToken, cookieOptions)
-       .json({
-            success : true,
+        // already verified
+        if (user.isVerified) {
+            return res.status(400).json({
+                success: false,
+                message: "User is already verified"
+            });
+        }
 
-            message : "User registered successfully ! - Now verify the user",
-            user : createdUser,
-            accessToken : accessToken,
-            refreshToken : refreshToken
-        })
- 
-    }
-    catch (error) {
-        res.status(500).json({
-            success : false,
-            message : "Error in registering user",
-            error : error.message
-        })
-    }
+        // cooldown check (60 seconds)
+        if (
+            user.otpExpiry &&
+            user.otp &&
+            (user.otpExpiry.getTime() - Date.now()) >
+                (10 * 60 * 1000 - 60 * 1000)
+        ) {
+            return res.status(429).json({
+                success: false,
+                message:
+                    "Please wait 60 seconds before requesting another OTP"
+            });
+        }
 
-}
+        // generate new OTP
+        const otp = Math.floor(
+            100000 + Math.random() * 900000
+        ).toString();
+
+        // OTP valid for 10 minutes
+        const otpExpiry = new Date(
+            Date.now() + 10 * 60 * 1000
+        );
+
+        // save OTP
+        user.otp = otp;
+        user.otpExpiry = otpExpiry;
+
+        await user.save({
+            validateBeforeSave: false
+        });
+
+        // send email
+        await sendMail(
+            user.email,
+            "Dukanoo | OTP Verification",
+            verifyOTPEmailTemplate(
+                user.name,
+                otp
+            )
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "OTP sent successfully"
+        });
+
+    } catch (error) {
+
+        console.log(
+            "Error while resending OTP:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Error while resending OTP",
+            error: error.message
+        });
+    }
+};
+
 
 // user Login Controller Logic
 exports.loginUser = async (req, res) => {
@@ -121,6 +320,13 @@ exports.loginUser = async (req, res) => {
         return res.status(404).json({
             success : false,
             message : " User not found with this email or phone number"
+        })
+    }
+    // check if user is verified or not
+    if(!user.isVerified) {
+        return res.status(401).json({
+            success : false,
+            message : "Please verify your email before logging in"
         })
     }
 
@@ -221,6 +427,179 @@ exports.getUserProfile = async (req,res) =>{
 }
 
 // update user profile controller (name, avatar, phone)
+exports.updateUserProfile = async (req, res) => {
+    try {
 
+        const { name, email, phone } = req.body
+
+        // check empty fields
+        if (!name && !email && !phone) {
+            return res.status(400).json({
+                success: false,
+                message: "At least one field is required to update profile"
+            })
+        }
+
+        // check user exist
+        const user = await User.findById(req.user._id)
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User Not Found"
+            })
+        }
+
+        // duplicate check
+        const query = []
+
+        if(email) query.push({ email })
+        if(phone) query.push({ phone })
+
+        if(query.length > 0){
+
+            const existingUser = await User.findOne({
+                $or: query,
+                _id: { $ne: req.user._id }
+            })
+
+            if(existingUser){
+                return res.status(400).json({
+                    success: false,
+                    message: "Email or phone already in use"
+                })
+            }
+        }
+
+        // update fields
+        if(name) user.name = name
+        if(email) user.email = email
+        if(phone) user.phone = phone
+
+        await user.save()
+
+        const updatedUser = await User.findById(user._id)
+            .select("-password -refreshToken")
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile updated successfully",
+            user: updatedUser
+        })
+
+    } catch (error) {
+
+        console.log("error in update user profile controller", error)
+
+        return res.status(500).json({
+            success: false,
+            message: "Error in update user profile controller",
+            error: error.message
+        })
+    }
+}
+
+// upload user avatar controller
+exports.uploadUserAvatar = async (req,res) => {
+    try {
+        if(!req.file || !req.file.path) {
+            return res.status(400).json({
+                success : false,
+                message : "Avatar image is required"
+            })
+        }
+        // find user
+        const user = await User.findById(req.user._id)
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            })
+        }
+
+        // remove old avatar from cloudinary
+        if (user.avatar && user.avatar.public_id) {
+
+            await cloudinary.uploader.destroy(
+                user.avatar.public_id
+            )
+        }
+
+        // save new avatar
+        user.avatar = {
+            url: req.file.path,
+            public_id: req.file.filename
+        }
+
+        await user.save()
+
+        return res.status(200).json({
+            success: true,
+            message: "Avatar updated successfully",
+            avatar: user.avatar
+        })
+
+    }
+    catch (error) {
+        console.log("error in upload user avatar controller", error)
+        return res.status(500).json({
+            success: false,
+            message: "Error in upload user avatar controller",
+            error: error.message
+        })
+    }
+}
 
 // change password controller 
+
+exports.sendTestMail = async (req, res) => {
+
+    try {
+
+        const { email } = req.body;
+
+        // Validation
+        if (!email) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Email is required"
+            });
+        }
+
+        // Generate Random OTP
+        const otp = Math.floor(
+            100000 + Math.random() * 900000
+        );
+
+        // Generate HTML Template
+        const html = verifyOTPEmailTemplate(
+            "Danish",
+            otp
+        );
+
+        // Send Email
+        await sendMail(
+            email,
+            "OTP Verification",
+            html
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Test email sent successfully",
+            otp
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to send email",
+            error: error.message
+        });
+    }
+};
