@@ -64,8 +64,40 @@ exports.createShop = async (req,res) => {
 }
 
 
-// get shop All details 
+// get shop All details (get MY SHOP) 
+exports.getShopAllDetail = async (req, res) => {
+    try {
+        // get owner id from the req.user
+    const ownerId = req.user.id
+    
+    // find shop detail using owner id 
+    const shopDetails = await Shop.findOne
+    ({
+       owner: ownerId
+    })
+    .populate("owner", "name email phone")
 
+    if(!shopDetails) {
+         return res.status(404).json({
+                success: false,
+                message: "Shop not found"
+            });
+    }
+
+     return res.status(200).json({
+            success: true,
+            data: shopDetails
+        });
+        
+    } catch (error) {
+        return res.status(400).json({
+            success : false,
+            message : " error while getting shop details",
+            error  
+        })
+    }
+    
+}
 // Change shop settings
 exports.changeShopSettings = async (req, res) => {
 
