@@ -10,11 +10,17 @@ const categorySchema = new mongoose.Schema({
         required : true
     },
     image  :{ 
-        type : String
+        url : String,
+        public_id: String
     },
     // optional Description
     description : {
         type : String
+    },
+    // to mange number of items in category
+    itemCount :{
+        type : Number,
+        default : 0
     },
     // is visible on QR or not 
     isVisible : {
