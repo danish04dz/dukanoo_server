@@ -32,6 +32,14 @@ app.use('/api/v1/users', userRoutes)
 const shopRoutes = require('./routes/shop.routes')
 app.use('/api/v1/shops', shopRoutes)
 
+// Category Routes
+const categoryRoutes = require('./routes/category.routes')
+app.use('/api/v1/categories', categoryRoutes)  
+
+// Product Routes
+const productRoutes = require('./routes/product.routes')
+app.use('/api/v1/products', productRoutes)
+
 // Admin Routes
 const adminRoutes = require('./routes/admin.routes')
 app.use('/api/v1/admin', adminRoutes)
